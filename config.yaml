@@ -26,6 +26,26 @@ strategies:
   bollinger_bands:
     period: 20
     std_dev: 2.0
+  composite:
+    sma_short: 50
+    sma_long: 200
+    rsi_period: 14
+    rsi_overbought: 70
+    rsi_oversold: 30
+    bb_period: 20
+    bb_std: 2.0
+    vol_spike_threshold: 2.0
+    vol_lookback: 20
+    mfi_period: 14
+    swing_lookback: 5
+    use_options: true
+    signal_threshold: 0.35
+    # Weights (must sum to 1.0)
+    weight_technical: 0.30
+    weight_volume: 0.20
+    weight_structure: 0.20
+    weight_patterns: 0.15
+    weight_options: 0.15
 
 # Risk management
 risk:
@@ -33,3 +53,19 @@ risk:
   stop_loss_pct: 0.05          # 5% stop loss
   take_profit_pct: 0.15        # 15% take profit
   commission_pct: 0.001        # 0.1% commission per trade
+
+# Analysis settings
+analysis:
+  volume:
+    spike_threshold: 2.0       # x times avg volume to flag spike
+    dry_up_threshold: 0.4      # fraction of avg to flag volume dry-up
+    lookback: 20
+  market_structure:
+    swing_lookback: 5
+    cluster_pct: 0.015         # S/R clustering tolerance
+  patterns:
+    swing_lookback: 5
+  options:
+    vol_oi_threshold: 3.0      # volume/OI ratio for unusual activity
+    min_volume: 100
+    max_expiries: 4
