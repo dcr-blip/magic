@@ -1,0 +1,35 @@
+## Trading Bot Configuration
+
+# Initial capital for backtesting
+initial_capital: 100000.0
+
+# Default ticker symbols to trade
+symbols:
+  - AAPL
+  - MSFT
+  - GOOGL
+
+# Date range for backtesting
+backtest:
+  start_date: "2024-01-01"
+  end_date: "2025-01-01"
+
+# Strategy settings
+strategies:
+  sma_crossover:
+    short_window: 20
+    long_window: 50
+  rsi:
+    period: 14
+    overbought: 70
+    oversold: 30
+  bollinger_bands:
+    period: 20
+    std_dev: 2.0
+
+# Risk management
+risk:
+  max_position_pct: 0.10      # Max 10% of capital per position
+  stop_loss_pct: 0.05          # 5% stop loss
+  take_profit_pct: 0.15        # 15% take profit
+  commission_pct: 0.001        # 0.1% commission per trade
