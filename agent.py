@@ -371,10 +371,22 @@ Guidelines:
 
 
 class Agent:
-    def __init__(self, model: str = "claude-sonnet-4-6", max_iterations: int = 20):
+    """Core agent that can run headlessly or with a terminal UI.
+
+    Set *headless=True* (used by the Discord bot) to suppress Rich spinners
+    and stdout streaming so the agent returns plain text silently.
+    """
+
+    def __init__(
+        self,
+        model: str = "claude-sonnet-4-6",
+        max_iterations: int = 20,
+        headless: bool = False,
+    ):
         self.client = anthropic.Anthropic()
         self.model = model
         self.max_iterations = max_iterations
+        self.headless = headless
         self.history: list[dict] = []
 
     # ------------------------------------------------------------------
@@ -412,16 +424,32 @@ class Agent:
         """
         Stream a response from Claude.
 
-        Shows a spinner until the first text token arrives, then streams text
-        directly to stdout. Returns (final_message, full_text).
+        In terminal mode: shows a spinner, then streams text to stdout.
+        In headless mode: silently collects the full text.
+        Returns (final_message, full_text).
         """
         full_text = ""
-        spinner_active = True
 
+        if self.headless:
+            # Headless: no spinners, no stdout — just collect text
+            with self.client.messages.stream(
+                model=self.model,
+                max_tokens=4096,
+                system=SYSTEM_PROMPT,
+                tools=TOOL_DEFINITIONS,
+                messages=self.history,
+            ) as stream:
+                for text in stream.text_stream:
+                    full_text += text
+                response = stream.get_final_message()
+            return response, full_text
+
+        # Terminal mode: Rich spinners + live streaming
+        spinner_active = True
         live = Live(
             Spinner("dots", text="[dim]Thinking...[/dim]"),
             console=console,
-            transient=True,   # erase spinner line when stopped
+            transient=True,
             refresh_per_second=12,
         )
         live.start()
@@ -455,7 +483,7 @@ class Agent:
 
     def _run_loop(self) -> str:
         for iteration in range(self.max_iterations):
-            if iteration > 0:
+            if not self.headless and iteration > 0:
                 console.print(Rule(style="dim"))
 
             response, streamed_text = self._call_api()
@@ -470,32 +498,35 @@ class Agent:
                     if block.type != "tool_use":
                         continue
 
-                    # Display tool call header
-                    args_str = json.dumps(block.input, indent=2)
-                    args_display = args_str if len(args_str) <= 300 else args_str[:300] + "..."
-                    console.print(
-                        Text.assemble(
-                            ("⚙  ", "bold cyan"),
-                            (block.name, "cyan"),
-                            ("  ", ""),
-                            (args_display, "dim"),
+                    if not self.headless:
+                        args_str = json.dumps(block.input, indent=2)
+                        args_display = args_str if len(args_str) <= 300 else args_str[:300] + "..."
+                        console.print(
+                            Text.assemble(
+                                ("⚙  ", "bold cyan"),
+                                (block.name, "cyan"),
+                                ("  ", ""),
+                                (args_display, "dim"),
+                            )
                         )
-                    )
 
-                    # Execute with spinner
-                    result = ""
-                    with Live(
-                        Spinner("dots", text=f"[dim]Running {block.name}...[/dim]"),
-                        console=console,
-                        transient=True,
-                        refresh_per_second=12,
-                    ):
+                    if self.headless:
                         result = self._execute_tool(block.name, block.input)
+                    else:
+                        result = ""
+                        with Live(
+                            Spinner("dots", text=f"[dim]Running {block.name}...[/dim]"),
+                            console=console,
+                            transient=True,
+                            refresh_per_second=12,
+                        ):
+                            result = self._execute_tool(block.name, block.input)
 
-                    # Show a preview of the result
                     result_str = str(result)
-                    preview = result_str[:400] + ("..." if len(result_str) > 400 else "")
-                    console.print(f"[dim green]   ↳ {preview}[/dim green]")
+
+                    if not self.headless:
+                        preview = result_str[:400] + ("..." if len(result_str) > 400 else "")
+                        console.print(f"[dim green]   ↳ {preview}[/dim green]")
 
                     tool_results.append(
                         {
