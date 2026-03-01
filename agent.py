@@ -11,7 +11,7 @@ from rich.rule import Rule
 from rich.spinner import Spinner
 from rich.text import Text
 
-from internship_scraper import find_internships
+from internship_scraper import find_internships, scrape_company_internships
 from tools import (
     analyze_data,
     create_chart,
@@ -137,6 +137,33 @@ TOOL_DEFINITIONS = [
                 },
             },
             "required": [],
+        },
+    },
+    {
+        "name": "scrape_company_internships",
+        "description": (
+            "Search for internship postings at specific companies. Takes a comma-separated "
+            "list of company names and searches LinkedIn, Glassdoor, Indeed, ZipRecruiter, "
+            "and the web for their internship openings. Also looks up each company's size. "
+            "Use this when the user wants to target particular companies."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "companies": {
+                    "type": "string",
+                    "description": (
+                        "Comma-separated list of company names, "
+                        "e.g. 'Stripe, Notion, Figma, Datadog'"
+                    ),
+                },
+                "keywords": {
+                    "type": "string",
+                    "description": "Additional keywords to narrow results (default: 'internship')",
+                    "default": "internship",
+                },
+            },
+            "required": ["companies"],
         },
     },
     {
@@ -304,6 +331,7 @@ TOOL_FUNCTIONS = {
     "read_file": read_file,
     "write_file": write_file,
     "find_internships": find_internships,
+    "scrape_company_internships": scrape_company_internships,
     "run_shell": run_shell,
     "github_api": github_api,
     "get_weather": get_weather,
@@ -327,8 +355,10 @@ Available capabilities:
 - **Weather**: get_weather for current weather conditions anywhere.
 - **Data**: analyze_data to inspect CSV/JSON files, query_db for SQLite databases,
   create_chart to generate bar/line/pie/scatter/histogram charts as PNG images.
-- **Internships**: find_internships to search for internship listings at mid-sized
-  companies (50-500 employees).
+- **Internships**: find_internships pulls from 6 job boards (The Muse, Indeed,
+  LinkedIn, Glassdoor, SimplyHired, ZipRecruiter) filtered to mid-sized companies
+  (50-500 employees). scrape_company_internships targets specific companies by name
+  and searches across all boards + the web for their openings.
 
 Guidelines:
 - Search the web to gather current information before making claims.
