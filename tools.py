@@ -8,6 +8,8 @@ import requests
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
 
+from internship_scraper import find_internships  # noqa: F401  (re-exported as a tool)
+
 
 def web_search(query: str, max_results: int = 5) -> str:
     """Search the web using DuckDuckGo."""

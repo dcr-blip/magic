@@ -4,6 +4,7 @@ import json
 
 import anthropic
 
+from internship_scraper import find_internships
 from tools import execute_python, fetch_page, read_file, web_search, write_file
 
 TOOL_DEFINITIONS = [
@@ -79,6 +80,43 @@ TOOL_DEFINITIONS = [
             "required": ["path", "content"],
         },
     },
+    {
+        "name": "find_internships",
+        "description": (
+            "Search for internship listings at companies with 50-500 employees. "
+            "Pulls from The Muse API and Indeed, enriching results with company size "
+            "data. Returns a formatted list of matching positions with company name, "
+            "size, location, and application URL."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "keywords": {
+                    "type": "string",
+                    "description": (
+                        "Role or skill keywords to filter by, "
+                        "e.g. 'software engineering', 'data science', 'marketing'. "
+                        "Leave blank to search all internships."
+                    ),
+                    "default": "",
+                },
+                "location": {
+                    "type": "string",
+                    "description": (
+                        "City or region filter, e.g. 'New York', 'San Francisco', 'Remote'. "
+                        "Leave blank for all locations."
+                    ),
+                    "default": "",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Maximum number of listings to return (default: 20).",
+                    "default": 20,
+                },
+            },
+            "required": [],
+        },
+    },
 ]
 
 TOOL_FUNCTIONS = {
@@ -87,18 +125,21 @@ TOOL_FUNCTIONS = {
     "execute_python": execute_python,
     "read_file": read_file,
     "write_file": write_file,
+    "find_internships": find_internships,
 }
 
 SYSTEM_PROMPT = """\
 You are an autonomous agent that can browse the web, write and execute Python code,
-and read/write files to complete tasks. Break complex tasks into clear steps, use
-your tools methodically, and always provide a concise final answer.
+read/write files, and search for internship opportunities at mid-sized companies.
 
 Guidelines:
 - Search the web to gather current information before making claims.
 - Verify facts by cross-referencing multiple sources when accuracy matters.
 - Use execute_python for any calculations or data transformations.
 - Use write_file to persist results or generated code for the user.
+- Use find_internships when the user wants internship listings; it automatically
+  filters to companies with 50-500 employees. You can call it multiple times with
+  different keywords or locations to broaden the search.
 - When finished, summarise what you did and what you found.
 """
 
