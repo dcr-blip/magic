@@ -12,7 +12,20 @@ from rich.spinner import Spinner
 from rich.text import Text
 
 from internship_scraper import find_internships
-from tools import execute_python, fetch_page, read_file, web_search, write_file
+from tools import (
+    analyze_data,
+    create_chart,
+    execute_python,
+    fetch_page,
+    get_news,
+    get_weather,
+    github_api,
+    query_db,
+    read_file,
+    run_shell,
+    web_search,
+    write_file,
+)
 
 console = Console()
 
@@ -126,6 +139,162 @@ TOOL_DEFINITIONS = [
             "required": [],
         },
     },
+    {
+        "name": "run_shell",
+        "description": (
+            "Execute a shell/bash command and return stdout and stderr. "
+            "Useful for running git, curl, ls, grep, and other CLI tools. "
+            "Dangerous commands (rm -rf /, mkfs, etc.) are blocked."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "command": {"type": "string", "description": "The shell command to run"},
+                "timeout": {
+                    "type": "integer",
+                    "description": "Timeout in seconds (default: 30)",
+                    "default": 30,
+                },
+            },
+            "required": ["command"],
+        },
+    },
+    {
+        "name": "github_api",
+        "description": (
+            "Call the GitHub REST API. Provide an endpoint like 'repos/owner/repo' "
+            "or 'search/repositories'. Uses GITHUB_TOKEN from environment if available."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "endpoint": {
+                    "type": "string",
+                    "description": "API endpoint, e.g. 'repos/owner/repo', 'search/repositories'",
+                },
+                "method": {
+                    "type": "string",
+                    "description": "HTTP method (default: GET)",
+                    "default": "GET",
+                },
+                "params": {
+                    "type": "string",
+                    "description": "JSON string of query params (GET) or request body (POST). Default: empty.",
+                    "default": "",
+                },
+            },
+            "required": ["endpoint"],
+        },
+    },
+    {
+        "name": "get_weather",
+        "description": "Get current weather conditions for any location. No API key needed.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location": {
+                    "type": "string",
+                    "description": "City name or location, e.g. 'New York', 'London', 'Tokyo'",
+                },
+            },
+            "required": ["location"],
+        },
+    },
+    {
+        "name": "get_news",
+        "description": "Search for recent news articles on a topic using DuckDuckGo News.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "The news topic to search for"},
+                "max_results": {
+                    "type": "integer",
+                    "description": "Max number of results (default: 5)",
+                    "default": 5,
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "query_db",
+        "description": (
+            "Run a SQL query against a SQLite database. Supports SELECT, INSERT, "
+            "UPDATE, DELETE, CREATE TABLE, and PRAGMA statements."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "db_path": {
+                    "type": "string",
+                    "description": "Path to the SQLite database file (created if it doesn't exist)",
+                },
+                "query": {"type": "string", "description": "The SQL query to execute"},
+                "params": {
+                    "type": "string",
+                    "description": "JSON array of query parameters for ? placeholders. Default: []",
+                    "default": "[]",
+                },
+            },
+            "required": ["db_path", "query"],
+        },
+    },
+    {
+        "name": "analyze_data",
+        "description": (
+            "Load a CSV or JSON file and perform analysis. "
+            "Operations: summary (overview), head (first 10 rows), describe (stats for numeric columns), "
+            "columns (list columns), shape (row/col count), value_counts:<column> (frequency counts)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string", "description": "Path to a .csv or .json file"},
+                "operation": {
+                    "type": "string",
+                    "description": "Analysis operation: summary, head, describe, columns, shape, value_counts:<col>",
+                    "default": "summary",
+                },
+            },
+            "required": ["file_path"],
+        },
+    },
+    {
+        "name": "create_chart",
+        "description": (
+            "Create a chart from data and save as a PNG image. "
+            "Provide data as JSON: {\"labels\": [...], \"values\": [...]} for single series, "
+            "or {\"labels\": [...], \"series\": {\"name\": [...]}} for multiple series. "
+            "Chart types: bar, line, pie, scatter, hist."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "data_json": {
+                    "type": "string",
+                    "description": "JSON string with chart data",
+                },
+                "chart_type": {
+                    "type": "string",
+                    "description": "Type of chart: bar, line, pie, scatter, hist (default: bar)",
+                    "default": "bar",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Chart title",
+                    "default": "Chart",
+                },
+                "output_path": {
+                    "type": "string",
+                    "description": "Path to save the chart image (default: chart.png)",
+                    "default": "chart.png",
+                },
+                "x_label": {"type": "string", "description": "X-axis label", "default": ""},
+                "y_label": {"type": "string", "description": "Y-axis label", "default": ""},
+            },
+            "required": ["data_json"],
+        },
+    },
 ]
 
 TOOL_FUNCTIONS = {
@@ -135,20 +304,38 @@ TOOL_FUNCTIONS = {
     "read_file": read_file,
     "write_file": write_file,
     "find_internships": find_internships,
+    "run_shell": run_shell,
+    "github_api": github_api,
+    "get_weather": get_weather,
+    "get_news": get_news,
+    "query_db": query_db,
+    "analyze_data": analyze_data,
+    "create_chart": create_chart,
 }
 
 SYSTEM_PROMPT = """\
-You are an autonomous agent that can browse the web, write and execute Python code,
-read/write files, and search for internship opportunities at mid-sized companies.
+You are an autonomous agent with a broad set of tools for browsing the web,
+running code and shell commands, querying APIs, analysing data, and more.
+
+Available capabilities:
+- **Web**: web_search, fetch_page, get_news for finding information online.
+- **Code & Shell**: execute_python for Python code, run_shell for bash commands.
+  Dangerous shell commands are blocked for safety.
+- **Files**: read_file and write_file for local file I/O.
+- **GitHub**: github_api to call the GitHub REST API (set GITHUB_TOKEN env var
+  for private repos).
+- **Weather**: get_weather for current weather conditions anywhere.
+- **Data**: analyze_data to inspect CSV/JSON files, query_db for SQLite databases,
+  create_chart to generate bar/line/pie/scatter/histogram charts as PNG images.
+- **Internships**: find_internships to search for internship listings at mid-sized
+  companies (50-500 employees).
 
 Guidelines:
 - Search the web to gather current information before making claims.
 - Verify facts by cross-referencing multiple sources when accuracy matters.
-- Use execute_python for any calculations or data transformations.
-- Use write_file to persist results or generated code for the user.
-- Use find_internships when the user wants internship listings; it automatically
-  filters to companies with 50-500 employees. You can call it multiple times with
-  different keywords or locations to broaden the search.
+- Use the most appropriate tool for each sub-task.
+- For data work, prefer analyze_data for quick inspection and execute_python
+  or query_db for complex transformations.
 - When finished, summarise what you did and what you found.
 """
 

@@ -29,7 +29,7 @@ _HELP_TEXT = """\
 _BANNER = Panel(
     Text.from_markup(
         "[bold white]Autonomous Agent[/bold white]  [dim]powered by Claude[/dim]\n"
-        "[dim]Browse the web · Run code · Find internships[/dim]"
+        "[dim]Web · Shell · GitHub · Weather · News · Data · Charts · Code[/dim]"
     ),
     border_style="blue",
     padding=(0, 2),
