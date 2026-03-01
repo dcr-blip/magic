@@ -1,11 +1,20 @@
 """Autonomous agent powered by Claude with web browsing and code execution."""
 
 import json
+import sys
 
 import anthropic
+from rich.console import Console
+from rich.live import Live
+from rich.panel import Panel
+from rich.rule import Rule
+from rich.spinner import Spinner
+from rich.text import Text
 
 from internship_scraper import find_internships
 from tools import execute_python, fetch_page, read_file, web_search, write_file
+
+console = Console()
 
 TOOL_DEFINITIONS = [
     {
@@ -149,7 +158,32 @@ class Agent:
         self.client = anthropic.Anthropic()
         self.model = model
         self.max_iterations = max_iterations
-        self.messages: list = []
+        self.history: list[dict] = []
+
+    # ------------------------------------------------------------------
+    # Public interface
+    # ------------------------------------------------------------------
+
+    def reset(self) -> None:
+        """Clear conversation history, starting fresh."""
+        self.history = []
+
+    def run(self, task: str) -> str:
+        """Start a brand-new conversation with *task* and return the final reply."""
+        self.reset()
+        return self.chat(task)
+
+    def chat(self, message: str) -> str:
+        """
+        Add *message* to the ongoing conversation and return the agent's reply.
+        Conversation history is preserved across calls so the agent remembers context.
+        """
+        self.history.append({"role": "user", "content": message})
+        return self._run_loop()
+
+    # ------------------------------------------------------------------
+    # Internal loop
+    # ------------------------------------------------------------------
 
     def _execute_tool(self, tool_name: str, tool_input: dict) -> str:
         fn = TOOL_FUNCTIONS.get(tool_name)
@@ -157,50 +191,104 @@ class Agent:
             return f"Unknown tool: {tool_name}"
         return fn(**tool_input)
 
-    def run(self, task: str, verbose: bool = True) -> str:
-        """Run the agent on a task and return the final response."""
-        self.messages = [{"role": "user", "content": task}]
+    def _call_api(self) -> tuple[anthropic.types.Message, str]:
+        """
+        Stream a response from Claude.
 
-        for iteration in range(self.max_iterations):
-            if verbose:
-                print(f"\n[Iteration {iteration + 1}/{self.max_iterations}]")
+        Shows a spinner until the first text token arrives, then streams text
+        directly to stdout. Returns (final_message, full_text).
+        """
+        full_text = ""
+        spinner_active = True
 
-            response = self.client.messages.create(
+        live = Live(
+            Spinner("dots", text="[dim]Thinking...[/dim]"),
+            console=console,
+            transient=True,   # erase spinner line when stopped
+            refresh_per_second=12,
+        )
+        live.start()
+
+        try:
+            with self.client.messages.stream(
                 model=self.model,
                 max_tokens=4096,
                 system=SYSTEM_PROMPT,
                 tools=TOOL_DEFINITIONS,
-                messages=self.messages,
-            )
+                messages=self.history,
+            ) as stream:
+                for text in stream.text_stream:
+                    if spinner_active:
+                        spinner_active = False
+                        live.stop()
+                    full_text += text
+                    sys.stdout.write(text)
+                    sys.stdout.flush()
 
-            self.messages.append({"role": "assistant", "content": response.content})
+                response = stream.get_final_message()
+        finally:
+            if spinner_active:
+                live.stop()
+
+        if full_text:
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+
+        return response, full_text
+
+    def _run_loop(self) -> str:
+        for iteration in range(self.max_iterations):
+            if iteration > 0:
+                console.print(Rule(style="dim"))
+
+            response, streamed_text = self._call_api()
+            self.history.append({"role": "assistant", "content": response.content})
 
             if response.stop_reason == "end_turn":
-                final_text = "".join(
-                    block.text for block in response.content if hasattr(block, "text")
-                )
-                if verbose:
-                    print(f"\n[Agent finished]\n{final_text}")
-                return final_text
+                return streamed_text
 
             if response.stop_reason == "tool_use":
                 tool_results = []
                 for block in response.content:
-                    if block.type == "tool_use":
-                        if verbose:
-                            args_preview = json.dumps(block.input)[:200]
-                            print(f"  -> {block.name}({args_preview})")
-                        result = self._execute_tool(block.name, block.input)
-                        if verbose:
-                            print(f"     {str(result)[:300]}")
-                        tool_results.append(
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": block.id,
-                                "content": str(result),
-                            }
+                    if block.type != "tool_use":
+                        continue
+
+                    # Display tool call header
+                    args_str = json.dumps(block.input, indent=2)
+                    args_display = args_str if len(args_str) <= 300 else args_str[:300] + "..."
+                    console.print(
+                        Text.assemble(
+                            ("⚙  ", "bold cyan"),
+                            (block.name, "cyan"),
+                            ("  ", ""),
+                            (args_display, "dim"),
                         )
-                self.messages.append({"role": "user", "content": tool_results})
+                    )
+
+                    # Execute with spinner
+                    result = ""
+                    with Live(
+                        Spinner("dots", text=f"[dim]Running {block.name}...[/dim]"),
+                        console=console,
+                        transient=True,
+                        refresh_per_second=12,
+                    ):
+                        result = self._execute_tool(block.name, block.input)
+
+                    # Show a preview of the result
+                    result_str = str(result)
+                    preview = result_str[:400] + ("..." if len(result_str) > 400 else "")
+                    console.print(f"[dim green]   ↳ {preview}[/dim green]")
+
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": result_str,
+                        }
+                    )
+
+                self.history.append({"role": "user", "content": tool_results})
             else:
                 break
 
