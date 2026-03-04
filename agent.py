@@ -1,6 +1,7 @@
 """Autonomous agent powered by Claude with web browsing and code execution."""
 
 import json
+import os
 import sys
 
 import anthropic
@@ -379,12 +380,13 @@ class Agent:
 
     def __init__(
         self,
-        model: str = "claude-sonnet-4-6",
+        model: str = "",
         max_iterations: int = 20,
         headless: bool = False,
     ):
         self.client = anthropic.Anthropic()
-        self.model = model
+        # Use env var, then default to sonnet. Set CLAUDE_MODEL=claude-haiku-4-5-20251001 for cheapest.
+        self.model = model or os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
         self.max_iterations = max_iterations
         self.headless = headless
         self.history: list[dict] = []
